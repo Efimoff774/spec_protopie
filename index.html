@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=360, initial-scale=1.0">
+<title>TUI Segmented Spec Fixed v7</title>
+<style>
+ body {margin:0;background:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;}
+.phone {width:360px;height:740px;margin:20px auto;background:white;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,0.15);overflow:hidden;}
+.status-bar {display:flex;align-items:center;justify-content:space-between;padding:8px 12px 4px;font-size:12px;color:#6b7280;}
+.status-bar-time {font-weight:500;}
+.status-bar-icons {display:flex;align-items:center;gap:4px;}
+.status-icon {display:inline-block;border-radius:3px;background:#9ca3af;}
+.status-icon-signal {width:14px;height:8px;}
+.status-icon-wifi {width:14px;height:8px;}
+.status-icon-battery {width:20px;height:10px;border-radius:3px;position:relative;}
+.status-icon-battery::after {content:"";position:absolute;right:-2px;top:2px;width:2px;height:6px;border-radius:1px;background:#9ca3af;}
+.app-bar {display:flex;align-items:center;padding:4px 16px 12px 16px;}
+.back-button {width:32px;height:32px;border-radius:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;}
+.back-chevron {width:8px;height:8px;border-left:2px solid #111827;border-bottom:2px solid #111827;transform:rotate(45deg);margin-left:2px;}
+.app-bar-title {flex:1;text-align:left;font-size:20px;font-weight:600;color:#111827;}
+.segmented-container {padding:0 16px;}
+.segmented {background:#eef0f2;border-radius:16px;height:32px;padding:2px;position:relative;box-sizing:border-box;}
+.segment-track {height:28px;position:relative;border-radius:14px;overflow:hidden;}
+.indicator {position:absolute;left:0;top:0;height:100%;width:0;border-radius:14px;background:#fff;box-shadow:0 1px 2px rgba(0,0,0,0.15);transform:translateX(0);transition:transform 200ms ease,width 200ms ease;z-index:1;will-change:transform,width;}
+.indicator.no-transition {transition:none !important;}
+@media (prefers-reduced-motion: reduce){.indicator{transition:none;}}
+.segment-scroll {display:flex;overflow-x:auto;scroll-behavior:smooth;height:100%;align-items:center;position:relative;}
+.segment-scroll::-webkit-scrollbar {display:none;}
+.segment {display:flex;align-items:center;justify-content:center;height:28px;padding:0 12px;border-radius:14px;white-space:nowrap;cursor:pointer;flex-shrink:0;font-size:13px;background:transparent;position:relative;z-index:2;color:rgba(0,0,0,0.72);transition:color 200ms ease;}
+@media (prefers-reduced-motion: reduce){.segment{transition:none;}}
+.segment.active {color:rgba(0,0,0,0.92);}
+.segment.sticky.active {background:#fff;box-shadow:0 1px 2px rgba(0,0,0,0.15);}
+.segment.sticky {position:sticky;left:0;z-index:4;}
+.mask {position:absolute;left:0;top:0;bottom:0;width:0;background:#eef0f2;border-top-left-radius:14px;border-bottom-left-radius:14px;z-index:3;pointer-events:none;opacity:0;transition:opacity 0.2s;}
+.mask.visible {opacity:1;}
+.fade {position:absolute;left:0;top:0;bottom:0;width:32px;background:linear-gradient(to right,#eef0f2 0%, rgba(238,240,242,0) 100%);pointer-events:none;z-index:3;opacity:0;transition:opacity 0.2s;}
+.fade.visible {opacity:1;}
+.content {padding:16px;font-size:16px;}
+</style>
+</head>
+<body>
+<div class="phone">
+<div class="status-bar">
+  <div class="status-bar-time">12:30</div>
+  <div class="status-bar-icons">
+    <span class="status-icon status-icon-signal"></span>
+    <span class="status-icon status-icon-wifi"></span>
+    <span class="status-icon status-icon-battery"></span>
+  </div>
+</div>
+<div class="app-bar">
+  <div class="back-button">
+    <span class="back-chevron"></span>
+  </div>
+  <div class="app-bar-title">Аналитика</div>
+</div>
+<div class="segmented-container">
+<div class="segmented">
+<div class="segment-track">
+<div class="indicator" id="indicator"></div>
+<div class="mask" id="mask"></div>
+<div class="fade" id="fade"></div>
+<div class="segment-scroll" id="scroll" onscroll="handleScroll()">
+<div class="segment sticky active" onclick="selectTab(this)">Все</div>
+<div class="segment" onclick="selectTab(this)">Списания и поступления</div>
+<div class="segment" onclick="selectTab(this)">Топливо</div>
+<div class="segment" onclick="selectTab(this)">Интернет-эквайринг</div>
+<div class="segment" onclick="selectTab(this)">РКО</div>
+<div class="segment" onclick="selectTab(this)">CloudTips</div>
+</div>
+</div>
+</div>
+</div>
+<div class="content" id="content">Выбран раздел: Все</div>
+</div>
+<script>
+const scrollEl=document.getElementById("scroll");
+const fadeEl=document.getElementById("fade");
+const maskEl=document.getElementById("mask");
+const indicatorEl=document.getElementById("indicator");
+const trackEl=document.querySelector(".segment-track");
+const stickyEl=document.querySelector(".segment.sticky");
+
+let activeEl=document.querySelector(".segment.active");
+let scrollStopTimer=null;
+let programmaticScroll=false;
+
+function updateMaskGeometry(){
+  if(!stickyEl) return;
+  const trackRect=trackEl.getBoundingClientRect();
+  const stickyRect=stickyEl.getBoundingClientRect();
+  const w=Math.max(0, stickyRect.right-trackRect.left);
+  maskEl.style.width=w+"px";
+  fadeEl.style.left=w+"px";
+}
+
+function updateIndicator(){
+  if(!activeEl) return;
+  const rect=activeEl.getBoundingClientRect();
+  const trackRect=trackEl.getBoundingClientRect();
+  const x=rect.left-trackRect.left;
+  indicatorEl.style.width=rect.width+"px";
+  indicatorEl.style.transform=`translateX(${x}px)`;
+}
+
+function handleScroll(){
+  const scrolled=scrollEl.scrollLeft>0;
+  fadeEl.classList.toggle("visible", scrolled);
+  maskEl.classList.toggle("visible", scrolled);
+  if(!programmaticScroll){
+    indicatorEl.classList.add("no-transition");
+    if(scrollStopTimer) clearTimeout(scrollStopTimer);
+    scrollStopTimer=setTimeout(()=>indicatorEl.classList.remove("no-transition"),120);
+  }
+  updateIndicator();
+}
+
+function isFullyVisible(el){
+const rect=el.getBoundingClientRect();
+const containerRect=scrollEl.getBoundingClientRect();
+const trackRect=trackEl.getBoundingClientRect();
+const stickyRect=stickyEl.getBoundingClientRect();
+const maskWidth=Math.max(0, stickyRect.right-trackRect.left);
+return rect.left>=containerRect.left+maskWidth && rect.right<=containerRect.right;
+}
+function selectTab(el){
+document.querySelectorAll('.segment').forEach(s=>s.classList.remove('active'));
+el.classList.add('active');
+activeEl=el;
+requestAnimationFrame(updateIndicator);
+document.getElementById('content').innerText="Выбран раздел: "+el.innerText;
+if(el.classList.contains('sticky')){
+  programmaticScroll=true;
+  scrollEl.scrollLeft=0;
+  setTimeout(()=>{programmaticScroll=false;},200);
+  return;
+}
+const rect=el.getBoundingClientRect();
+const containerRect=scrollEl.getBoundingClientRect();
+const trackRect=trackEl.getBoundingClientRect();
+const stickyRect=stickyEl.getBoundingClientRect();
+const maskWidth=Math.max(0, stickyRect.right-trackRect.left);
+const isLeftHidden=rect.left<containerRect.left+maskWidth;
+const isRightHidden=rect.right>containerRect.right;
+let target=scrollEl.scrollLeft;
+if(isLeftHidden){
+  target=el.offsetLeft-maskWidth;
+}else if(isRightHidden){
+  const rightOverflow=rect.right-containerRect.right;
+  const peek=24; // чуть-чуть показываем следующий таб
+  target=scrollEl.scrollLeft+rightOverflow+peek;
+}else{
+  return;
+}
+target=Math.max(0,Math.min(target,scrollEl.scrollWidth-scrollEl.clientWidth));
+programmaticScroll=true;
+scrollEl.scrollTo({left:target,behavior:"smooth"});
+setTimeout(()=>{programmaticScroll=false;},250);
+}
+
+function sync(){
+  updateMaskGeometry();
+  updateIndicator();
+  handleScroll();
+}
+
+window.addEventListener("resize", ()=>requestAnimationFrame(sync));
+requestAnimationFrame(sync);
+</script>
+</body>
+</html>
