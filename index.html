@@ -148,7 +148,7 @@ if(isLeftHidden){
   target=el.offsetLeft-maskWidth;
 }else if(isRightHidden){
   const rightOverflow=rect.right-containerRect.right;
-  const peek=24; // чуть-чуть показываем следующий таб
+  const peek=40; // чуть-чуть показываем следующий таб
   target=scrollEl.scrollLeft+rightOverflow+peek;
 }else{
   return;
